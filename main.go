@@ -97,14 +97,17 @@ func queryDailyReward(db *sql.DB, account string) (float64, error) {
 	// 这里的 SQL 使用 AT TIME ZONE 'Asia/Shanghai'，并确保与“今天”对比也是在上海时区
 	// 如有需要，可以根据自己逻辑进行修改
 	sqlStmt := `
-        SELECT COALESCE(SUM(reward)/1e6, 0)
-        FROM epoch_distributor
-        WHERE project = 'ALEO'
-          AND miner_account_id IN (
-              SELECT id FROM miner_account WHERE name = $1
-          )
-          AND DATE(epoch_time AT TIME ZONE 'Asia/Shanghai') = DATE(NOW() AT TIME ZONE 'Asia/Shanghai')
-    `
+    SELECT COALESCE(SUM(reward) / 1e6, 0)
+	FROM epoch_distributor
+	WHERE (epoch_time AT TIME ZONE 'UTC')::DATE = (SELECT DATE(epoch_time AT TIME ZONE 'UTC')
+                                               FROM epoch_distributor
+                                               WHERE project = 'ALEO'
+                                               ORDER BY epoch_time DESC 
+                                               LIMIT 1)
+  AND project = 'ALEO'
+  AND miner_account_id IN (SELECT id
+                           FROM miner_account
+                           WHERE name = $1);`
 	var dailyReward float64
 	err := db.QueryRow(sqlStmt, account).Scan(&dailyReward)
 	if err != nil {
